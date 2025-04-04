@@ -8,7 +8,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { jsPDF } from "jspdf"; // Ensure jspdf is installed (npm install jspdf)
+import { jsPDF } from "jspdf";
 import "./css/Home.css";
 
 function Home() {
@@ -106,6 +106,8 @@ function Home() {
 
   const handleDownloadPDF = async () => {
     const ideasList = [];
+    const imagesList = []; // Array to hold image data objects
+
     const totalRounds = participants.length;
     for (const participant of participants) {
       for (let round = 1; round <= totalRounds; round++) {
@@ -114,10 +116,20 @@ function Home() {
           const roundDoc = await getDoc(doc(db, "brainwritingRounds", docId));
           if (roundDoc.exists()) {
             const data = roundDoc.data();
+            // Collect text ideas
             if (data.ideas && Array.isArray(data.ideas)) {
               data.ideas.forEach((idea) => {
                 if (idea.trim() !== "" && idea.trim() !== "(No idea)") {
                   ideasList.push(idea);
+                }
+              });
+            }
+            // Collect images from this round (assuming cardImages is an object with keys "0", "1", "2")
+            if (data.cardImages) {
+              Object.keys(data.cardImages).forEach((key) => {
+                const imageUrl = data.cardImages[key];
+                if (imageUrl) {
+                  imagesList.push(imageUrl);
                 }
               });
             }
@@ -127,13 +139,17 @@ function Home() {
         }
       }
     }
-    if (ideasList.length === 0) {
-      alert("No ideas were collected.");
+
+    if (ideasList.length === 0 && imagesList.length === 0) {
+      alert("No ideas or images were collected.");
       return;
     }
+
     const pdfDoc = new jsPDF();
     let y = 10;
     pdfDoc.setFontSize(12);
+
+    // Add ideas text to the PDF
     ideasList.forEach((idea) => {
       pdfDoc.text(10, y, idea);
       y += 10;
@@ -142,6 +158,16 @@ function Home() {
         y = 10;
       }
     });
+
+    // Add a new page for images or append them as you see fit.
+    // This example adds each image on a separate page.
+    imagesList.forEach((imgData, index) => {
+      pdfDoc.addPage();
+      // Adjust the parameters as needed.
+      // Note: if imgData is not a data URL, you'll need to convert it to base64 first.
+      pdfDoc.addImage(imgData, "JPEG", 10, 10, 180, 160);
+    });
+
     pdfDoc.save("brainwriting_ideas.pdf");
   };
 

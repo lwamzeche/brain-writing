@@ -1,6 +1,10 @@
 // generateImage.js
 export async function generateImage(prompt) {
   const apiKey = process.env.REACT_APP_OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error("REACT_APP_OPENAI_API_KEY is not set");
+    return null;
+  }
   try {
     const response = await fetch(
       "https://api.openai.com/v1/images/generations",

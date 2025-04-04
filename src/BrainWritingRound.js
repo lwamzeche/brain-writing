@@ -105,7 +105,7 @@ function BrainWritingRound() {
     return (
       <div key={cardIndex} className="idea-card-wrapper">
         <div className={`idea-card ${isFlipped ? "flipped" : ""}`}>
-          {/* Front Face */}
+          {/* Front Face: Show idea (or textarea) */}
           <div className="card-face card-front">
             <button
               className="flip-btn"
@@ -114,36 +114,10 @@ function BrainWritingRound() {
                 toggleFlip(colIndex, cardIndex);
               }}
             >
-              Flip
+              {isFlipped ? "Back" : "Flip"}
             </button>
             {isEditable ? (
-              cardImages[imageKey] ? (
-                <img
-                  src={cardImages[imageKey]}
-                  alt="AI generated"
-                  className="card-image"
-                />
-              ) : (
-                "Loading image..."
-              )
-            ) : (
-              <div className="front-content">
-                {col.ideas[cardIndex] ? col.ideas[cardIndex] : "No idea"}
-              </div>
-            )}
-          </div>
-          {/* Back Face */}
-          <div className="card-face card-back">
-            <button
-              className="flip-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFlip(colIndex, cardIndex);
-              }}
-            >
-              Back
-            </button>
-            {isEditable ? (
+              // For editable rounds, show the idea text input
               <textarea
                 className="idea-textarea"
                 rows={4}
@@ -153,7 +127,24 @@ function BrainWritingRound() {
                 }
                 placeholder="Write idea..."
               />
-            ) : cardImages[imageKey] ? (
+            ) : (
+              <div className="front-content">
+                {col.ideas[cardIndex] ? col.ideas[cardIndex] : "No idea"}
+              </div>
+            )}
+          </div>
+          {/* Back Face: Show generated image */}
+          <div className="card-face card-back">
+            <button
+              className="flip-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFlip(colIndex, cardIndex);
+              }}
+            >
+              {isFlipped ? "Back" : "Flip"}
+            </button>
+            {cardImages[imageKey] ? (
               <img
                 src={cardImages[imageKey]}
                 alt="AI generated"
