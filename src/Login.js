@@ -74,14 +74,14 @@ function Login() {
     }
 
     try {
-      // Generate a random 6-character session ID
+      // generate a random 6-character session ID
       const newSessionId = Math.random()
         .toString(36)
         .substring(2, 8)
         .toUpperCase();
 
-      // Create session document in Firebase
-      // We do NOT add the host to participants
+      // create session document in Firebase
+      // we do NOT add the host to participants
       await setDoc(doc(db, "brainwritingSessions", newSessionId), {
         createdAt: new Date().toISOString(),
         host: playerName, // The host's name

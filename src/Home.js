@@ -43,7 +43,7 @@ function Home() {
           setSessionTopic(data.topic || "No topic provided");
           setSessionStarted(!!data.started);
           setSessionActive(data.active !== undefined ? data.active : true);
-          // Navigate non-host users to the participant round when session starts
+          // navigate non-host users to the participant round when session starts
           if (data.started && data.host !== storedName) {
             navigate(`/participant/${storedName}/round/1`);
           }
@@ -64,7 +64,7 @@ function Home() {
         setSessionTopic(data.topic || "No topic provided");
         setSessionStarted(!!data.started);
         setSessionActive(data.active !== undefined ? data.active : true);
-        // Navigate non-host users when session starts
+        // navigate non-host users when session starts
         if (data.started && data.host !== storedName) {
           navigate(`/participant/${storedName}/round/1`);
         }
@@ -104,9 +104,34 @@ function Home() {
     }
   };
 
+  // helper function using Image and Canvas
+  const getBase64FromUrl = (url) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "Anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        try {
+          const dataURL = canvas.toDataURL("image/jpeg");
+          resolve(dataURL);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => {
+        reject(new Error("Could not load image at " + url));
+      };
+      img.src = url;
+    });
+  };
+
   const handleDownloadPDF = async () => {
-    const ideasList = [];
-    const imagesList = []; // Array to hold image data objects
+    const ideasWithImages = []; // We'll store paired ideas and images
+    const sessionId = localStorage.getItem("brainwritingSessionId");
 
     const totalRounds = participants.length;
     for (const participant of participants) {
@@ -116,20 +141,23 @@ function Home() {
           const roundDoc = await getDoc(doc(db, "brainwritingRounds", docId));
           if (roundDoc.exists()) {
             const data = roundDoc.data();
-            // Collect text ideas
+            // Match ideas with their images
             if (data.ideas && Array.isArray(data.ideas)) {
-              data.ideas.forEach((idea) => {
+              data.ideas.forEach((idea, idx) => {
                 if (idea.trim() !== "" && idea.trim() !== "(No idea)") {
-                  ideasList.push(idea);
-                }
-              });
-            }
-            // Collect images from this round (assuming cardImages is an object with keys "0", "1", "2")
-            if (data.cardImages) {
-              Object.keys(data.cardImages).forEach((key) => {
-                const imageUrl = data.cardImages[key];
-                if (imageUrl) {
-                  imagesList.push(imageUrl);
+                  // Get the corresponding image if available
+                  let imageUrl = null;
+                  if (data.cardImages && data.cardImages[idx]) {
+                    imageUrl = data.cardImages[idx];
+                  }
+
+                  // Add to our collection
+                  ideasWithImages.push({
+                    idea,
+                    imageUrl,
+                    participant,
+                    round,
+                  });
                 }
               });
             }
@@ -140,32 +168,63 @@ function Home() {
       }
     }
 
-    if (ideasList.length === 0 && imagesList.length === 0) {
-      alert("No ideas or images were collected.");
+    if (ideasWithImages.length === 0) {
+      alert("No ideas were collected.");
       return;
     }
 
+    // Convert each image URL to a data URL
+    const processedPairs = await Promise.all(
+      ideasWithImages.map(async (pair) => {
+        if (pair.imageUrl && !pair.imageUrl.startsWith("data:")) {
+          try {
+            pair.imageUrl = await getBase64FromUrl(pair.imageUrl);
+          } catch (error) {
+            console.error("Error converting image to base64:", error);
+            pair.imageUrl = null;
+          }
+        }
+        return pair;
+      })
+    );
+
+    // Create PDF
     const pdfDoc = new jsPDF();
-    let y = 10;
+    let y = 20;
+    pdfDoc.setFontSize(16);
+    pdfDoc.text("Brainwriting Session Ideas", 10, 10);
     pdfDoc.setFontSize(12);
 
-    // Add ideas text to the PDF
-    ideasList.forEach((idea) => {
-      pdfDoc.text(10, y, idea);
-      y += 10;
-      if (y > 280) {
+    // Add each idea with its image
+    processedPairs.forEach((pair, index) => {
+      // Reset y position if we're near the bottom or starting a new entry
+      if (y > 250 || index > 0) {
         pdfDoc.addPage();
-        y = 10;
+        y = 20;
       }
-    });
 
-    // Add a new page for images or append them as you see fit.
-    // This example adds each image on a separate page.
-    imagesList.forEach((imgData, index) => {
-      pdfDoc.addPage();
-      // Adjust the parameters as needed.
-      // Note: if imgData is not a data URL, you'll need to convert it to base64 first.
-      pdfDoc.addImage(imgData, "JPEG", 10, 10, 180, 160);
+      // Add idea text with number
+      const ideaText = `${index + 1}. ${pair.idea} (by ${
+        pair.participant
+      }, round ${pair.round})`;
+      pdfDoc.text(ideaText, 10, y);
+      y += 10;
+
+      // Add image if available
+      if (pair.imageUrl) {
+        try {
+          pdfDoc.addImage(pair.imageUrl, "JPEG", 10, y, 80, 60);
+          y += 70; // Move down to account for image height
+        } catch (e) {
+          console.error("Error adding image to PDF:", e);
+          pdfDoc.text("(Image could not be displayed)", 10, y);
+          y += 10;
+        }
+      } else {
+        pdfDoc.text("(No image available)", 10, y);
+        y += 10;
+      }
+      y += 10;
     });
 
     pdfDoc.save("brainwriting_ideas.pdf");

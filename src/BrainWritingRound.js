@@ -1,4 +1,3 @@
-// BrainWritingRound.js
 import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useBrainWritingSession } from "./useBrainWritingSession";
@@ -28,43 +27,21 @@ function BrainWritingRound() {
 
   if (loading) {
     return (
-      <div className="brainwriting-container" style={{ textAlign: "center" }}>
+      <div className="brainwriting-container">
         <h2>Loading session data...</h2>
-        <p>Please wait while we set up your brainwriting session.</p>
       </div>
     );
   }
 
   if (isHost) {
     return (
-      <div
-        className="host-waiting"
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-          textAlign: "center",
-        }}
-      >
+      <div className="host-waiting">
         <h2>Brainwriting Session In Progress</h2>
         <p>
           You are the host. Participants are generating ideas. Once they finish,
           you can end the session or wait for the final round to end.
         </p>
-        <button
-          onClick={() => navigate("/home")}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#007bff",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-          }}
-        >
-          Back to Home
-        </button>
+        <button onClick={() => navigate("/home")}>Back to Home</button>
       </div>
     );
   }
@@ -72,86 +49,59 @@ function BrainWritingRound() {
   const myIndex = participants.indexOf(name);
   if (myIndex === -1) {
     return (
-      <div
-        className="brainwriting-container"
-        style={{ textAlign: "center", marginTop: "50px" }}
-      >
+      <div style={{ textAlign: "center", marginTop: "50px" }}>
         <h2>Session Error</h2>
         <p>You are not registered as a participant in this session.</p>
-        <button
-          onClick={() => navigate("/")}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#007bff",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            marginTop: "20px",
-          }}
-        >
-          Back to Login
-        </button>
+        <button onClick={() => navigate("/")}>Back to Login</button>
       </div>
     );
   }
 
   function renderCard(colIndex, cardIndex) {
     const col = columns[colIndex];
-    // Use a composite key for the image: participant-round-cardIndex
     const imageKey = `${col.participant}-${col.round}-${cardIndex}`;
     const isFlipped = flipStates[colIndex]?.[cardIndex] ?? false;
     const isEditable = col.isEditable;
+    const ideaText = col.ideas[cardIndex];
 
     return (
       <div key={cardIndex} className="idea-card-wrapper">
         <div className={`idea-card ${isFlipped ? "flipped" : ""}`}>
-          {/* Front Face: Show idea (or textarea) */}
+          {/* Front Face */}
           <div className="card-face card-front">
             <button
               className="flip-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFlip(colIndex, cardIndex);
-              }}
+              onClick={() => toggleFlip(colIndex, cardIndex)}
             >
               {isFlipped ? "Back" : "Flip"}
             </button>
             {isEditable ? (
-              // For editable rounds, show the idea text input
               <textarea
-                className="idea-textarea"
-                rows={4}
-                value={col.ideas[cardIndex]}
+                value={ideaText}
+                rows={3}
                 onChange={(e) =>
                   handleIdeaChange(colIndex, cardIndex, e.target.value)
                 }
-                placeholder="Write idea..."
               />
             ) : (
-              <div className="front-content">
-                {col.ideas[cardIndex] ? col.ideas[cardIndex] : "No idea"}
-              </div>
+              <div>{ideaText || "No idea"}</div>
             )}
           </div>
-          {/* Back Face: Show generated image */}
+
+          {/* Back Face */}
           <div className="card-face card-back">
             <button
               className="flip-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFlip(colIndex, cardIndex);
-              }}
+              onClick={() => toggleFlip(colIndex, cardIndex)}
             >
-              {isFlipped ? "Back" : "Flip"}
+              Back
             </button>
-            {cardImages[imageKey] ? (
-              <img
-                src={cardImages[imageKey]}
-                alt="AI generated"
-                className="card-image"
-              />
+            {cardImages[imageKey] && cardImages[imageKey] !== "loading" ? (
+              <img src={cardImages[imageKey]} alt="" className="card-image" />
+            ) : cardImages[imageKey] === "loading" ? (
+              <div>Generating image...</div>
             ) : (
-              "Loading image..."
+              <div>No image</div>
             )}
           </div>
         </div>
@@ -161,52 +111,34 @@ function BrainWritingRound() {
 
   return (
     <div className="brainwriting-container">
-      <div className="topic-display">
-        <h2>Topic: {topic || "No topic provided"}</h2>
-      </div>
+      <h2>Topic: {topic}</h2>
       <div className="timer-box">
-        <div className="timer-label">
-          {submitted ? "Round ends in" : "Time left"}
-        </div>
-        <div className="timer-value">{timeLeft}s</div>
+        <span>Time left: {timeLeft}s</span>
       </div>
-      <div
-        className="grid-container"
-        style={{ gridTemplateColumns: `repeat(${columns.length}, 1fr)` }}
-      >
+
+      <div className="grid-container" style={{ display: "flex", gap: "20px" }}>
         {columns.map((col, colIndex) => (
           <div
             key={colIndex}
-            className={`column ${
-              col.isEditable && !submitted ? "editable-column" : ""
-            }`}
-            ref={col.isEditable && !submitted ? currentColumnRef : null}
+            className={col.isEditable ? "editable-column" : "column"}
+            ref={col.isEditable ? currentColumnRef : null}
           >
-            <div className="column-participant">
+            <h3>
               Round {col.round} – {col.participant}
-            </div>
+            </h3>
             {[0, 1, 2].map((cardIndex) => renderCard(colIndex, cardIndex))}
           </div>
         ))}
       </div>
-      {submitted ? (
-        <div className="waiting-message">
-          <h3>Your ideas have been submitted!</h3>
-          <p>
-            Waiting for the timer to end. Next round will start automatically in{" "}
-            {timeLeft} seconds.
-          </p>
-        </div>
+
+      {!submitted ? (
+        <button onClick={triggerFinish} disabled={finished}>
+          Finish Round
+        </button>
       ) : (
-        <div style={{ textAlign: "center", marginTop: "20px" }}>
-          <button
-            className="finish-button"
-            onClick={triggerFinish}
-            disabled={finished}
-          >
-            Finish Round
-          </button>
-        </div>
+        <p style={{ marginTop: "20px", color: "green" }}>
+          Your ideas have been submitted!
+        </p>
       )}
     </div>
   );

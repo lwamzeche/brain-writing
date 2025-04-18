@@ -218,7 +218,7 @@ textarea.idea-textarea {
   }
 }
 
-/* Media query adjustments for the larger cards */
+/* media query adjustments for the larger cards */
 @media (max-width: 1024px) {
   .grid-container {
     justify-content: space-around;
@@ -228,7 +228,7 @@ textarea.idea-textarea {
 /* Highlight the current editable column */
 .column.editable-column {
   background-color: rgba(0, 123, 255, 0.1); /* Light blue background */
-  border-radius: 12px;      
+  border-radius: 12px;
   padding: 15px;
   position: relative;
   margin-top: 0; /* Remove the top margin */
@@ -274,14 +274,14 @@ textarea.idea-textarea {
   color: #555;
 }
 
-/* Ensure images fill the card but keep their aspect ratio */
+/* images fill the card but keep their aspect ratio */
 .card-image {
-  width: 80%;
-  height: 90%;
+  width: 85%;
+  height: 75%;
   object-fit: cover; /* use 'contain' if you prefer letterboxing */
   border-radius: inherit; /* maintain card rounding */
   position: absolute;
-  top: 5;
+  top: 50px;
   left: 5;
   z-index: 1; /* below the flip button */
 }

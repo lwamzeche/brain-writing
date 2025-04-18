@@ -1,4 +1,3 @@
-// useBrainWritingSession.js
 import { useState, useEffect, useRef, useCallback } from "react";
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
@@ -11,7 +10,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
   const [topic, setTopic] = useState("");
   const [columns, setColumns] = useState([]);
   const [flipStates, setFlipStates] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(100);
   const [finished, setFinished] = useState(false);
   const [roundStartTime, setRoundStartTime] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -23,7 +22,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
 
   const isHost = sessionHost && name === sessionHost;
 
-  // 1. Fetch session data
+  // 1. fetch session data
   useEffect(() => {
     async function fetchSessionData() {
       const sessionId = localStorage.getItem("brainwritingSessionId") || "";
@@ -43,6 +42,11 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         setParticipants(sessionData.participants || []);
         setSessionHost(sessionData.host || "");
         setTopic(sessionData.topic || "No topic provided");
+
+        // reset time left when fetching new session data
+        // setTimeLeft(100);
+        // setSubmitted(false);
+        // setFinished(false);
 
         if (
           sessionData.currentRoundStartTime &&
@@ -66,7 +70,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     fetchSessionData();
   }, [roundNumber, navigate]);
 
-  // 2. Build the chain for participants
+  // 2. build the chain for participants
   useEffect(() => {
     if (isHost || participants.length === 0) return;
     const myIndex = participants.indexOf(name);
@@ -83,7 +87,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       let chain = [];
       const sessionId = localStorage.getItem("brainwritingSessionId") || "";
 
-      // Gather columns for previous rounds
+      // gather columns for previous rounds
       for (let k = 1; k < roundNumber; k++) {
         const writerIndex = (originalOwnerIndex - (k - 1) + length) % length;
         const writer = participants[writerIndex];
@@ -108,7 +112,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         });
       }
 
-      // Current round
+      // current round
       chain.push({
         round: roundNumber,
         participant: name,
@@ -122,12 +126,12 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     fetchChain();
   }, [isHost, participants, roundNumber, name]);
 
-  // 3. Keep columnsRef in sync
+  // 3. keep columnsRef in sync
   useEffect(() => {
     columnsRef.current = columns;
   }, [columns]);
 
-  // 4. Scroll into view for the current (editable) column
+  // 4. scroll into view for the current (editable) column
   useEffect(() => {
     if (currentColumnRef.current && columns.length > 0) {
       const timeoutId = setTimeout(() => {
@@ -137,53 +141,115 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
             block: "center",
           });
         }
-      }, 300);
+      }, 100);
       return () => clearTimeout(timeoutId);
     }
   }, [columns]);
 
   // 5. toggleFlip function
-  const toggleFlip = (colIndex, cardIndex) => {
-    setFlipStates((prev) => {
-      const newArr = [...prev];
-      newArr[colIndex] = [...newArr[colIndex]];
-      const newFlipState = !newArr[colIndex][cardIndex];
-      newArr[colIndex][cardIndex] = newFlipState;
+  const toggleFlip = useCallback(
+    (colIndex, cardIndex) => {
+      setFlipStates((prev) => {
+        const newArr = [...prev];
+        newArr[colIndex] = [...newArr[colIndex]];
+        const newFlipState = !newArr[colIndex][cardIndex];
+        newArr[colIndex][cardIndex] = newFlipState;
 
-      // When flipping to image side (newFlipState true),
-      // generate image only if the idea exists and hasn't been generated yet.
+        if (newFlipState && columns[colIndex].ideas[cardIndex].trim() !== "") {
+          const key = `${columns[colIndex].participant}-${columns[colIndex].round}-${cardIndex}`;
 
-      if (
-        newFlipState &&
-        columns[colIndex].ideas[cardIndex].trim() !== " " &&
-        !cardImages[
-          `${columns[colIndex].participant}-${columns[colIndex].round}-${cardIndex}`
-        ]
-      ) {
-        const prompt = `Illustration representing "${columns[colIndex].ideas[cardIndex]}"`;
-        generateImage(prompt)
-          .then((url) => {
-            if (url) {
+          // Only proceed if we don't already have this image or it's not loading
+          if (!cardImages[key]) {
+            // First, check if we need to look for existing images in the database
+            const sessionId =
+              localStorage.getItem("brainwritingSessionId") || "";
+            const isViewOnlyCard = !columns[colIndex].isEditable;
+
+            if (isViewOnlyCard) {
+              // Mark as loading while we check the database
               setCardImages((prevImages) => ({
                 ...prevImages,
-                [`${columns[colIndex].participant}-${columns[colIndex].round}-${cardIndex}`]:
-                  url,
+                [key]: "loading",
               }));
+
+              // Try to fetch existing image from the database first
+              const docId = `${sessionId}_${columns[colIndex].participant}_round_${columns[colIndex].round}`;
+              getDoc(doc(db, "brainwritingRounds", docId))
+                .then((docSnap) => {
+                  if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.cardImages && data.cardImages[cardIndex]) {
+                      // We found an existing image, use it
+                      setCardImages((prevImages) => ({
+                        ...prevImages,
+                        [key]: data.cardImages[cardIndex],
+                      }));
+                      return; // Exit early, no need to generate
+                    }
+                  }
+
+                  // If we didn't find an image, or if it's the user's own card in current round, generate one
+                  generateImageForCard(key, columns[colIndex].ideas[cardIndex]);
+                })
+                .catch((err) => {
+                  console.error("Error checking for existing image:", err);
+                  // Fallback to generation
+                  generateImageForCard(key, columns[colIndex].ideas[cardIndex]);
+                });
+            } else {
+              // It's the user's own editable card, generate image directly
+              setCardImages((prevImages) => ({
+                ...prevImages,
+                [key]: "loading",
+              }));
+              generateImageForCard(key, columns[colIndex].ideas[cardIndex]);
             }
-          })
-          .catch((err) => {
-            console.error("Error generating image:", err);
-          });
-      }
-      return newArr;
-    });
-  };
+          }
+        }
+        return newArr;
+      });
+    },
+    [columns, cardImages]
+  );
+
+  // Helper function to generate images
+  const generateImageForCard = useCallback((key, ideaText) => {
+    const prompt = `Illustration representing "${ideaText}"`;
+    generateImage(prompt)
+      .then((imageUrl) => {
+        setCardImages((prevImages) => ({
+          ...prevImages,
+          [key]: imageUrl,
+        }));
+      })
+      .catch((err) => {
+        console.error("Error generating image:", err);
+        setCardImages((prevImages) => ({
+          ...prevImages,
+          [key]: "",
+        }));
+      });
+  }, []);
 
   // 6. Navigation and saving logic
   const navigateToNextRound = useCallback(async () => {
     if (isHost) return;
+    // const sessionId = localStorage.getItem("brainwritingSessionId") || "";
+    // // If we have no sessionId, avoid doc update to fix the "Invalid document reference" error
+    // if (!sessionId) {
+    //   navigate("/home");
+    //   return;
+    // }
+
     if (roundNumber < participants.length) {
+      // const sessionRef = doc(db, "brainwritingSessions", sessionId);
+      // await updateDoc(sessionRef, {
+      //   currentRound: roundNumber + 1,
+      //   // currentRoundStartMs: Date.now(),
+      //   currentRoundStartTime: new Date().toISOString(),
       navigate(`/participant/${name}/round/${roundNumber + 1}`);
+      // });
+      // navigate(`/participant/${name}/round/${roundNumber + 1}`);
     } else {
       try {
         const sessionId = localStorage.getItem("brainwritingSessionId") || "";
@@ -209,12 +275,13 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         const currentRoundData = currentColumns[lastColIndex];
         if (currentRoundData && currentRoundData.participant) {
           const sessionId = localStorage.getItem("brainwritingSessionId") || "";
+          if (!sessionId) return; // same safeguard
           const docId = `${sessionId}_${currentRoundData.participant}_round_${currentRoundData.round}`;
           const ideasToSave = currentRoundData.ideas.map((idea) =>
             idea.trim() === "" ? "(No idea)" : idea
           );
 
-          // Build an object with all card images for this round
+          // build an object with all card images for this round
           const roundCardImages = {};
           [0, 1, 2].forEach((i) => {
             const key = `${currentRoundData.participant}-${currentRoundData.round}-${i}`;
@@ -229,6 +296,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
             timestamp: new Date().toISOString(),
           });
           setFinished(true);
+          // If time ended, move to next
           if (timeLeft === 0) {
             await navigateToNextRound();
           }
@@ -248,7 +316,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     const intervalId = setInterval(() => {
       const now = new Date();
       const elapsed = (now - roundStartTime) / 1000;
-      const newTimeLeft = Math.max(30 - Math.floor(elapsed), 0);
+      const newTimeLeft = Math.max(100 - Math.floor(elapsed), 0);
       setTimeLeft(newTimeLeft);
       if (newTimeLeft === 0) {
         clearInterval(intervalId);
@@ -269,10 +337,11 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     navigateToNextRound,
   ]);
 
-  // 8. Handler: triggerFinish
+  // 8. Trigger finish
   const triggerFinish = async () => {
     if (finished || submitted || isHost) return;
     setSubmitted(true);
+    // flip everything back to front
     setFlipStates((prev) => prev.map((col) => col.map(() => false)));
     await saveCurrentRound();
   };
@@ -286,9 +355,10 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       col.ideas = newIdeas;
       newCols[colIndex] = col;
 
-      // Immediately update Firestore with the new ideas using the updated state
+      // Immediately update Firestore
       if (col.isEditable && col.participant === name) {
         const sessionId = localStorage.getItem("brainwritingSessionId") || "";
+        if (!sessionId) return newCols; // safeguard
         const docId = `${sessionId}_${col.participant}_round_${col.round}`;
         setDoc(
           doc(db, "brainwritingRounds", docId),
@@ -308,10 +378,12 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     });
   };
 
+  // Listen for updates on completed rounds & restore images
   useEffect(() => {
     const sessionId = localStorage.getItem("brainwritingSessionId") || "";
     if (!sessionId) return;
     const unsubscribes = [];
+
     // For each finished round in the chain (all except the current editable round)
     columns.forEach((col, index) => {
       if (!col.isEditable) {
@@ -330,13 +402,18 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
                 };
                 return newColumns;
               });
-              // Update cardImages if available using composite key
-              // if (data.cardImages && data.cardImages["0"]) {
-              //   setCardImages((prev) => ({
-              //     ...prev,
-              //     [`${col.participant}-${col.round}-0`]: data.cardImages["0"],
-              //   }));
-              // }
+              // Update cardImages
+              if (data.cardImages) {
+                Object.entries(data.cardImages).forEach(
+                  ([thisCardIndex, url]) => {
+                    const compositeKey = `${col.participant}-${col.round}-${thisCardIndex}`;
+                    setCardImages((prev) => ({
+                      ...prev,
+                      [compositeKey]: url,
+                    }));
+                  }
+                );
+              }
             }
           }
         );
@@ -347,6 +424,25 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       unsubscribes.forEach((unsub) => unsub());
     };
   }, [columns]);
+
+  // Extra effect: if the host ends the session (active=false),
+  // navigate participant to /home automatically
+  useEffect(() => {
+    if (isHost) return;
+    const sessionId = localStorage.getItem("brainwritingSessionId") || "";
+    if (!sessionId) return;
+    const sessionRef = doc(db, "brainwritingSessions", sessionId);
+    const unsub = onSnapshot(sessionRef, (snap) => {
+      if (snap.exists()) {
+        const sessionData = snap.data();
+        if (sessionData.active === false) {
+          // navigate to home if session is ended
+          navigate("/home");
+        }
+      }
+    });
+    return () => unsub();
+  }, [isHost, navigate]);
 
   return {
     loading,
