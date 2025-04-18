@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   doc,
@@ -10,11 +10,15 @@ import {
 import { db } from "./firebase";
 import "./css/Home.css";
 
-// Printable view triggers print on mount, then calls onAfterPrint immediately
+// Printable component triggers window.print() once, then calls onAfterPrint
 function PrintableIdeas({ ideasWithImages, onAfterPrint }) {
+  const hasPrinted = useRef(false);
   useEffect(() => {
-    window.print();
-    onAfterPrint();
+    if (!hasPrinted.current) {
+      window.print();
+      hasPrinted.current = true;
+      onAfterPrint();
+    }
   }, [ideasWithImages, onAfterPrint]);
 
   return (
@@ -51,7 +55,7 @@ export default function Home() {
   const [hostSessionStarted, setHostSessionStarted] = useState(false);
   const [ideasToPrint, setIdeasToPrint] = useState(null);
 
-  // Load session info & redirect participants
+  // Load session info and redirect participants
   useEffect(() => {
     const storedName = localStorage.getItem("brainwritingName");
     const storedId = localStorage.getItem("brainwritingSessionId");
@@ -108,11 +112,15 @@ export default function Home() {
     else alert("Click your own card.");
   };
 
-  // Collect ideas & images into state, then show print view
+  // Gather ideas & images, then show print view
   const handleDownloadPDF = async () => {
-    const ideasWithImages = [];
     const rounds = participants.length;
-    for (const p of participants) {
+    const targetParticipants = isHost
+      ? participants.filter((p) => p !== playerName)
+      : participants;
+    const ideasWithImages = [];
+
+    for (const p of targetParticipants) {
       for (let r = 1; r <= rounds; r++) {
         const docId = `${sessionId}_${p}_round_${r}`;
         try {
@@ -132,12 +140,15 @@ export default function Home() {
         } catch {}
       }
     }
-    if (!ideasWithImages.length) return alert("No ideas collected.");
 
+    if (!ideasWithImages.length) return alert("No ideas collected.");
     setIdeasToPrint(ideasWithImages);
   };
 
-  const handleAfterPrint = () => setIdeasToPrint(null);
+  const handleAfterPrint = () => {
+    setIdeasToPrint(null);
+    navigate("/home");
+  };
 
   const handleCloseSession = async () => {
     if (!isHost) return;
@@ -167,7 +178,7 @@ export default function Home() {
       </div>
     );
 
-  // Show print preview if requested
+  // Print preview
   if (ideasToPrint) {
     return (
       <PrintableIdeas
