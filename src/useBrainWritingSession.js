@@ -22,7 +22,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
 
   const isHost = sessionHost && name === sessionHost;
 
-  // 1. fetch session data
+  // 1. Fetch session data
   useEffect(() => {
     async function fetchSessionData() {
       const sessionId = localStorage.getItem("brainwritingSessionId") || "";
@@ -42,11 +42,6 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         setParticipants(sessionData.participants || []);
         setSessionHost(sessionData.host || "");
         setTopic(sessionData.topic || "No topic provided");
-
-        // reset time left when fetching new session data
-        // setTimeLeft(100);
-        // setSubmitted(false);
-        // setFinished(false);
 
         if (
           sessionData.currentRoundStartTime &&
@@ -70,7 +65,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     fetchSessionData();
   }, [roundNumber, navigate]);
 
-  // 2. build the chain for participants
+  // 2. Build the chain for participants
   useEffect(() => {
     if (isHost || participants.length === 0) return;
     const myIndex = participants.indexOf(name);
@@ -87,7 +82,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       let chain = [];
       const sessionId = localStorage.getItem("brainwritingSessionId") || "";
 
-      // gather columns for previous rounds
+      // Gather columns for previous rounds
       for (let k = 1; k < roundNumber; k++) {
         const writerIndex = (originalOwnerIndex - (k - 1) + length) % length;
         const writer = participants[writerIndex];
@@ -112,7 +107,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         });
       }
 
-      // current round
+      // Current round
       chain.push({
         round: roundNumber,
         participant: name,
@@ -126,7 +121,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     fetchChain();
   }, [isHost, participants, roundNumber, name]);
 
-  // 3. keep columnsRef in sync
+  // 3. Keep columnsRef in sync
   useEffect(() => {
     columnsRef.current = columns;
   }, [columns]);
@@ -402,18 +397,18 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
                 };
                 return newColumns;
               });
-              // Update cardImages
-              if (data.cardImages) {
-                Object.entries(data.cardImages).forEach(
-                  ([thisCardIndex, url]) => {
-                    const compositeKey = `${col.participant}-${col.round}-${thisCardIndex}`;
-                    setCardImages((prev) => ({
-                      ...prev,
-                      [compositeKey]: url,
-                    }));
-                  }
-                );
-              }
+              // // Update cardImages
+              // if (data.cardImages) {
+              //   Object.entries(data.cardImages).forEach(
+              //     ([thisCardIndex, url]) => {
+              //       const compositeKey = `${col.participant}-${col.round}-${thisCardIndex}`;
+              //       setCardImages((prev) => ({
+              //         ...prev,
+              //         [compositeKey]: url,
+              //       }));
+              //     }
+              //   );
+              // }
             }
           }
         );
@@ -424,25 +419,6 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       unsubscribes.forEach((unsub) => unsub());
     };
   }, [columns]);
-
-  // Extra effect: if the host ends the session (active=false),
-  // navigate participant to /home automatically
-  useEffect(() => {
-    if (isHost) return;
-    const sessionId = localStorage.getItem("brainwritingSessionId") || "";
-    if (!sessionId) return;
-    const sessionRef = doc(db, "brainwritingSessions", sessionId);
-    const unsub = onSnapshot(sessionRef, (snap) => {
-      if (snap.exists()) {
-        const sessionData = snap.data();
-        if (sessionData.active === false) {
-          // navigate to home if session is ended
-          navigate("/home");
-        }
-      }
-    });
-    return () => unsub();
-  }, [isHost, navigate]);
 
   return {
     loading,

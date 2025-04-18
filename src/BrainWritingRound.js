@@ -110,10 +110,20 @@ function BrainWritingRound() {
   }
 
   return (
+    // <div className="brainwriting-container">
+    //   <h2>Topic: {topic}</h2>
+    //   <div className="timer-box">
+    //     <span>Time left: {timeLeft}s</span>
+    //   </div>
     <div className="brainwriting-container">
-      <h2>Topic: {topic}</h2>
+      <div className="topic-display">
+        <h2>Topic: {topic || "No topic provided"}</h2>
+      </div>
       <div className="timer-box">
-        <span>Time left: {timeLeft}s</span>
+        <div className="timer-label">
+          {submitted ? "Round ends in" : "Time left"}
+        </div>
+        <div className="timer-value">{timeLeft}s</div>
       </div>
 
       <div className="grid-container" style={{ display: "flex", gap: "20px" }}>
