@@ -1,3 +1,4 @@
+/* ---------- Existing styles ---------- */
 .home-container {
   background-color: #2973b2;
   min-height: 100vh;
@@ -101,4 +102,48 @@
 .session-info {
   margin-top: 2rem;
   color: #f0f0f0;
+}
+
+/* ---------- Print-specific styles ---------- */
+@media print {
+  .print-container {
+    width: 100%;
+  }
+
+  .print-container .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    page-break-inside: avoid;
+    margin-bottom: 8px;
+  }
+
+  .header-cell {
+    text-align: center;
+    font-weight: bold;
+    padding: 4px 0;
+  }
+
+  .image-cell {
+    padding: 4px;
+  }
+
+  .print-thumb {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .round-gap {
+    grid-column: 1 / -1;
+    height: 12px;
+  }
+
+  /* hide all non-print components */
+  body *:not(.print-container):not(.print-container *) {
+    visibility: hidden;
+  }
+  .print-container,
+  .print-container * {
+    visibility: visible;
+  }
 }

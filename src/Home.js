@@ -11,7 +11,12 @@ import { db } from "./firebase";
 import "./css/Home.css";
 
 // Printable component triggers window.print() once, then calls onAfterPrint
-function PrintableIdeas({ ideasWithImages, onAfterPrint }) {
+function PrintableIdeas({
+  participants,
+  rounds,
+  ideasWithImages,
+  onAfterPrint,
+}) {
   const hasPrinted = useRef(false);
   useEffect(() => {
     if (!hasPrinted.current) {
@@ -19,25 +24,67 @@ function PrintableIdeas({ ideasWithImages, onAfterPrint }) {
       hasPrinted.current = true;
       onAfterPrint();
     }
-  }, [ideasWithImages, onAfterPrint]);
+  }, [onAfterPrint]);
+
+  // build a lookup: grid[round][participant] = Array of { idx, imageUrl }
+  const grid = {};
+  for (let r = 1; r <= rounds; r++) {
+    grid[r] = {};
+    participants.forEach((p) => {
+      grid[r][p] = [];
+    });
+  }
+  ideasWithImages.forEach(({ round, participant, idx, imageUrl }) => {
+    if (grid[round] && grid[round][participant]) {
+      grid[round][participant].push({ idx, imageUrl });
+    }
+  });
+  // sort each small array by idx
+  for (let r = 1; r <= rounds; r++) {
+    participants.forEach((p) => {
+      grid[r][p].sort((a, b) => a.idx - b.idx);
+    });
+  }
 
   return (
     <div className="print-container">
-      {ideasWithImages.map((item, idx) => (
-        <div key={idx} className="print-page">
-          <h2>
-            {idx + 1}. {item.idea}{" "}
-            <small>
-              ({item.participant}, round {item.round})
-            </small>
-          </h2>
-          {item.imageUrl ? (
-            <img src={item.imageUrl} alt="" className="print-thumb" />
-          ) : (
-            <div>(No image available)</div>
-          )}
-        </div>
-      ))}
+      {/* Header row: P1, P2, … */}
+      <div className="row header-row">
+        {participants.map((_, i) => (
+          <div key={i} className="header-cell">
+            P{i + 1}
+          </div>
+        ))}
+      </div>
+
+      {/* For each round, spit out exactly 3 rows (one per card idx 0..2) */}
+      {Array.from({ length: rounds }, (_, roundIndex) => {
+        const r = roundIndex + 1;
+        return (
+          <React.Fragment key={r}>
+            {[0, 1, 2].map((cardIdx) => (
+              <div key={cardIdx} className="row image-row">
+                {participants.map((p, pi) => {
+                  const cell = grid[r][p][cardIdx];
+                  return (
+                    <div key={pi} className="image-cell">
+                      {cell?.imageUrl ? (
+                        <img
+                          src={cell.imageUrl}
+                          className="print-thumb"
+                          alt=""
+                        />
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            {/* gap after each round */}
+            <div className="row round-gap" />
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -53,7 +100,7 @@ export default function Home() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [sessionActive, setSessionActive] = useState(true);
   const [hostSessionStarted, setHostSessionStarted] = useState(false);
-  const [ideasToPrint, setIdeasToPrint] = useState(null);
+  const [printData, setPrintData] = useState(null);
 
   // Load session info and redirect participants
   useEffect(() => {
@@ -130,7 +177,7 @@ export default function Home() {
           (data.ideas || []).forEach((idea, idx) => {
             if (idea.trim() && idea.trim() !== "(No idea)") {
               ideasWithImages.push({
-                idea,
+                idx,
                 imageUrl: data.cardImages?.[idx] || null,
                 participant: p,
                 round: r,
@@ -142,11 +189,15 @@ export default function Home() {
     }
 
     if (!ideasWithImages.length) return alert("No ideas collected.");
-    setIdeasToPrint(ideasWithImages);
+    setPrintData({
+      participants: targetParticipants,
+      rounds,
+      ideasWithImages,
+    });
   };
 
   const handleAfterPrint = () => {
-    setIdeasToPrint(null);
+    setPrintData(null);
     navigate("/home");
   };
 
@@ -179,10 +230,12 @@ export default function Home() {
     );
 
   // Print preview
-  if (ideasToPrint) {
+  if (printData) {
     return (
       <PrintableIdeas
-        ideasWithImages={ideasToPrint}
+        participants={printData.participants}
+        rounds={printData.rounds}
+        ideasWithImages={printData.ideasWithImages}
         onAfterPrint={handleAfterPrint}
       />
     );
