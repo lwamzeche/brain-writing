@@ -92,6 +92,7 @@ function PrintableIdeas({
 export default function Home() {
   const navigate = useNavigate();
   const [playerName, setPlayerName] = useState("");
+  const [hostName, setHostName] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [participants, setParticipants] = useState([]);
   const [sessionTopic, setSessionTopic] = useState("");
@@ -116,6 +117,7 @@ export default function Home() {
         if (!snap.exists()) throw new Error("Session not found");
         const data = snap.data();
         setParticipants(data.participants || []);
+        setHostName(data.host || "");
         setIsHost(data.host === storedName);
         setSessionTopic(data.topic || "No topic provided");
         setSessionStarted(!!data.started);
@@ -131,6 +133,7 @@ export default function Home() {
       if (!snap.exists()) return;
       const data = snap.data();
       setParticipants(data.participants || []);
+      setHostName(data.host || "");
       setSessionTopic(data.topic || "No topic provided");
       setSessionStarted(!!data.started);
       setSessionActive(data.active !== false);
@@ -161,10 +164,10 @@ export default function Home() {
 
   // Gather ideas & images, then show print view
   const handleDownloadPDF = async () => {
-    const rounds = participants.length;
-    const targetParticipants = isHost
-      ? participants.filter((p) => p !== playerName)
-      : participants;
+    // always exclude the host from columns
+    const targetParticipants = participants.filter((p) => p !== hostName);
+    // number of rounds = number of writers
+    const rounds = targetParticipants.length;
     const ideasWithImages = [];
 
     for (const p of targetParticipants) {
@@ -174,11 +177,14 @@ export default function Home() {
           const snap = await getDoc(doc(db, "brainwritingRounds", docId));
           if (!snap.exists()) continue;
           const data = snap.data();
-          (data.ideas || []).forEach((idea, idx) => {
-            if (idea.trim() && idea.trim() !== "(No idea)") {
+          const cardImagesObj = data.cardImages || {};
+          // cardImagesObj is an object { "0": url0, "1": url1, "2": url2 }
+          Object.entries(cardImagesObj).forEach(([idxStr, imageUrl]) => {
+            const idx = parseInt(idxStr, 10);
+            if (imageUrl) {
               ideasWithImages.push({
                 idx,
-                imageUrl: data.cardImages?.[idx] || null,
+                imageUrl,
                 participant: p,
                 round: r,
               });
@@ -188,12 +194,8 @@ export default function Home() {
       }
     }
 
-    if (!ideasWithImages.length) return alert("No ideas collected.");
-    setPrintData({
-      participants: targetParticipants,
-      rounds,
-      ideasWithImages,
-    });
+    // if (!ideasWithImages.length) return alert("No ideas collected.");
+    setPrintData({ participants: targetParticipants, rounds, ideasWithImages });
   };
 
   const handleAfterPrint = () => {

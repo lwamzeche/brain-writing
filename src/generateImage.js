@@ -15,9 +15,10 @@ export async function generateImage(prompt) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
+          model: "dall-e-2",
           prompt,
           n: 1,
-          size: "256x256",
+          size: "1024x1024",
         }),
       }
     );
