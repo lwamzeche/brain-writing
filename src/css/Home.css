@@ -104,7 +104,6 @@
   color: #f0f0f0;
 }
 
-/* ---------- Print-specific styles ---------- */
 @media print {
   .print-container {
     width: 100%;

@@ -82,7 +82,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       let chain = [];
       const sessionId = localStorage.getItem("brainwritingSessionId") || "";
 
-      // Gather columns for previous rounds
+      // gather columns for previous rounds
       for (let k = 1; k < roundNumber; k++) {
         const writerIndex = (originalOwnerIndex - (k - 1) + length) % length;
         const writer = participants[writerIndex];
@@ -107,7 +107,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         });
       }
 
-      // Current round
+      // current round
       chain.push({
         round: roundNumber,
         participant: name,
@@ -150,7 +150,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         const newFlipState = !newArr[colIndex][cardIndex];
         newArr[colIndex][cardIndex] = newFlipState;
 
-        if (newFlipState && columns[colIndex].ideas[cardIndex].trim() !== "") {
+        if (columns[colIndex].ideas[cardIndex].trim() !== "") {
           const key = `${columns[colIndex].participant}-${columns[colIndex].round}-${cardIndex}`;
 
           // Only proceed if we don't already have this image or it's not loading

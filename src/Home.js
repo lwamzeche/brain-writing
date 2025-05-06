@@ -10,7 +10,6 @@ import {
 import { db } from "./firebase";
 import "./css/Home.css";
 
-// Printable component triggers window.print() once, then calls onAfterPrint
 function PrintableIdeas({
   participants,
   rounds,
@@ -48,43 +47,36 @@ function PrintableIdeas({
 
   return (
     <div className="print-container">
-      {/* Header row: P1, P2, … */}
+      {/* Header row */}
       <div className="row header-row">
         {participants.map((_, i) => (
           <div key={i} className="header-cell">
-            P{i + 1}
+            Idea{i + 1}
           </div>
         ))}
       </div>
 
-      {/* For each round, spit out exactly 3 rows (one per card idx 0..2) */}
-      {Array.from({ length: rounds }, (_, roundIndex) => {
-        const r = roundIndex + 1;
-        return (
-          <React.Fragment key={r}>
-            {[0, 1, 2].map((cardIdx) => (
-              <div key={cardIdx} className="row image-row">
-                {participants.map((p, pi) => {
-                  const cell = grid[r][p][cardIdx];
-                  return (
-                    <div key={pi} className="image-cell">
-                      {cell?.imageUrl ? (
-                        <img
-                          src={cell.imageUrl}
-                          className="print-thumb"
-                          alt=""
-                        />
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-            {/* gap after each round */}
-            <div className="row round-gap" />
-          </React.Fragment>
-        );
-      })}
+      {/* loop over each original participant & each of their 3 cards,
+          and for each row pull that card through all rounds via cyclic shift */}
+      {participants.map((_, origIdx) =>
+        [0, 1, 2].map((cardIdx) => (
+          <div key={`${origIdx}-${cardIdx}`} className="row image-row">
+            {participants.map((__, roundOffset) => {
+              const participantAtThisRound =
+                participants[(origIdx + roundOffset) % participants.length];
+              const roundNumber = roundOffset + 1;
+              const cell = grid[roundNumber][participantAtThisRound][cardIdx];
+              return (
+                <div key={roundOffset} className="image-cell">
+                  {cell?.imageUrl && (
+                    <img src={cell.imageUrl} className="print-thumb" alt="" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))
+      )}
     </div>
   );
 }
