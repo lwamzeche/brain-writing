@@ -25,7 +25,7 @@ function PrintableIdeas({
     }
   }, [onAfterPrint]);
 
-  // build a lookup: grid[round][participant] = Array of { idx, imageUrl }
+  // build lookup: grid[round][participant] = Array of { idx, imageUrl }
   const grid = {};
   for (let r = 1; r <= rounds; r++) {
     grid[r] = {};
@@ -34,9 +34,7 @@ function PrintableIdeas({
     });
   }
   ideasWithImages.forEach(({ round, participant, idx, imageUrl }) => {
-    if (grid[round] && grid[round][participant]) {
-      grid[round][participant].push({ idx, imageUrl });
-    }
+    grid[round][participant].push({ idx, imageUrl });
   });
   // sort each small array by idx
   for (let r = 1; r <= rounds; r++) {
@@ -45,38 +43,47 @@ function PrintableIdeas({
     });
   }
 
+  // build a flat list of rows so we can number them: each origIdx × 3 cards
+  const rows = [];
+  participants.forEach((_, origIdx) =>
+    [0, 1, 2].forEach((cardIdx, localIdx) => {
+      rows.push({
+        origIdx,
+        cardIdx,
+        label: origIdx * 3 + localIdx + 1 + ".", // “1.”, “2.”, …
+      });
+    })
+  );
+
   return (
     <div className="print-container">
-      {/* Header row */}
-      <div className="row header-row">
-        {participants.map((_, i) => (
-          <div key={i} className="header-cell">
-            Idea{i + 1}
-          </div>
-        ))}
-      </div>
+      {rows.map(({ origIdx, cardIdx, label }) => (
+        <div key={`${origIdx}-${cardIdx}`} className="row image-row">
+          {/* Row number column */}
+          <div className="row-number">{label}</div>
 
-      {/* loop over each original participant & each of their 3 cards,
-          and for each row pull that card through all rounds via cyclic shift */}
-      {participants.map((_, origIdx) =>
-        [0, 1, 2].map((cardIdx) => (
-          <div key={`${origIdx}-${cardIdx}`} className="row image-row">
-            {participants.map((__, roundOffset) => {
-              const participantAtThisRound =
-                participants[(origIdx + roundOffset) % participants.length];
-              const roundNumber = roundOffset + 1;
-              const cell = grid[roundNumber][participantAtThisRound][cardIdx];
-              return (
-                <div key={roundOffset} className="image-cell">
+          {/* The images + arrows */}
+          {participants.map((_, roundOffset) => {
+            const participantAtThisRound =
+              participants[(origIdx + roundOffset) % participants.length];
+            const roundNumber = roundOffset + 1;
+            const cell = grid[roundNumber][participantAtThisRound][cardIdx];
+
+            return (
+              <React.Fragment key={roundOffset}>
+                <div className="image-cell">
                   {cell?.imageUrl && (
                     <img src={cell.imageUrl} className="print-thumb" alt="" />
                   )}
                 </div>
-              );
-            })}
-          </div>
-        ))
-      )}
+                {roundOffset < participants.length - 1 && (
+                  <div className="arrow">→</div>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -154,7 +161,7 @@ export default function Home() {
     else alert("Click your own card.");
   };
 
-  // Gather ideas & images, then show print view
+  // gather ideas & images, then show print view
   const handleDownloadPDF = async () => {
     // always exclude the host from columns
     const targetParticipants = participants.filter((p) => p !== hostName);
