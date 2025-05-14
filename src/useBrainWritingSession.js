@@ -10,7 +10,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
   const [topic, setTopic] = useState("");
   const [columns, setColumns] = useState([]);
   const [flipStates, setFlipStates] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(100);
+  const [timeLeft, setTimeLeft] = useState(300);
   const [finished, setFinished] = useState(false);
   const [roundStartTime, setRoundStartTime] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -136,7 +136,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
             block: "center",
           });
         }
-      }, 100);
+      }, 300);
       return () => clearTimeout(timeoutId);
     }
   }, [columns]);
@@ -311,7 +311,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     const intervalId = setInterval(() => {
       const now = new Date();
       const elapsed = (now - roundStartTime) / 1000;
-      const newTimeLeft = Math.max(100 - Math.floor(elapsed), 0);
+      const newTimeLeft = Math.max(300 - Math.floor(elapsed), 0);
       setTimeLeft(newTimeLeft);
       if (newTimeLeft === 0) {
         clearInterval(intervalId);
@@ -374,51 +374,85 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
   };
 
   // Listen for updates on completed rounds & restore images
+  // useEffect(() => {
+  //   const sessionId = localStorage.getItem("brainwritingSessionId") || "";
+  //   if (!sessionId) return;
+  //   const unsubscribes = [];
+
+  // For each finished round in the chain (all except the current editable round)
+  // columns.forEach((col, index) => {
+  //   if (!col.isEditable) {
+  //     const docId = `${sessionId}_${col.participant}_round_${col.round}`;
+  //     const unsub = onSnapshot(
+  //       doc(db, "brainwritingRounds", docId),
+  //       (docSnap) => {
+  //         if (docSnap.exists()) {
+  //           const data = docSnap.data();
+  //           // Update ideas for this round
+  //           setColumns((prevColumns) => {
+  //             const newColumns = [...prevColumns];
+  //             newColumns[index] = {
+  //               ...newColumns[index],
+  //               ideas: data.ideas || newColumns[index].ideas,
+  //             };
+  //             return newColumns;
+  //           });
+  //           // // Update cardImages
+  //           // if (data.cardImages) {
+  //           //   Object.entries(data.cardImages).forEach(
+  //           //     ([thisCardIndex, url]) => {
+  //           //       const compositeKey = `${col.participant}-${col.round}-${thisCardIndex}`;
+  //           //       setCardImages((prev) => ({
+  //           //         ...prev,
+  //           //         [compositeKey]: url,
+  //           //       }));
+  //           //     }
+  //           //   );
+  //           // }
+  //         }
+  //       }
+  //     );
+  //     unsubscribes.push(unsub);
+  //   }
+  // });
+  //   return () => {
+  //     unsubscribes.forEach((unsub) => unsub());
+  //   };
+  // }, [columns]);
+
   useEffect(() => {
     const sessionId = localStorage.getItem("brainwritingSessionId") || "";
     if (!sessionId) return;
     const unsubscribes = [];
 
-    // For each finished round in the chain (all except the current editable round)
-    columns.forEach((col, index) => {
-      if (!col.isEditable) {
-        const docId = `${sessionId}_${col.participant}_round_${col.round}`;
-        const unsub = onSnapshot(
-          doc(db, "brainwritingRounds", docId),
-          (docSnap) => {
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              // Update ideas for this round
-              setColumns((prevColumns) => {
-                const newColumns = [...prevColumns];
-                newColumns[index] = {
-                  ...newColumns[index],
-                  ideas: data.ideas || newColumns[index].ideas,
-                };
-                return newColumns;
-              });
-              // // Update cardImages
-              // if (data.cardImages) {
-              //   Object.entries(data.cardImages).forEach(
-              //     ([thisCardIndex, url]) => {
-              //       const compositeKey = `${col.participant}-${col.round}-${thisCardIndex}`;
-              //       setCardImages((prev) => ({
-              //         ...prev,
-              //         [compositeKey]: url,
-              //       }));
-              //     }
-              //   );
-              // }
-            }
+    for (let k = 1; k < roundNumber; k++) {
+      const writer = columns.find((c) => c.round === k);
+      if (!writer || writer.isEditable) continue;
+      const docId = `${sessionId}_${writer.participant}_round_${k}`;
+      const unsub = onSnapshot(doc(db, "brainwritingRounds", docId), (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        setColumns((prev) => {
+          // find the same column
+          const idx = prev.findIndex(
+            (c) => c.round === k && c.participant === writer.participant
+          );
+          if (idx === -1) return prev;
+          const oldIdeas = prev[idx].ideas;
+          const newIdeas = data.ideas || oldIdeas;
+          // only update if changed
+          if (JSON.stringify(oldIdeas) === JSON.stringify(newIdeas)) {
+            return prev;
           }
-        );
-        unsubscribes.push(unsub);
-      }
-    });
-    return () => {
-      unsubscribes.forEach((unsub) => unsub());
-    };
-  }, [columns]);
+          const next = [...prev];
+          next[idx] = { ...next[idx], ideas: newIdeas };
+          return next;
+        });
+      });
+      unsubscribes.push(unsub);
+    }
+    return () => unsubscribes.forEach((u) => u());
+  }, [roundNumber]);
 
   return {
     loading,
