@@ -16,14 +16,19 @@ function PrintableIdeas({
   ideasWithImages,
   onAfterPrint,
 }) {
+  const imgCount = ideasWithImages.length;
+  const [loadedCount, setLoadedCount] = useState(0);
   const hasPrinted = useRef(false);
+
+  // only print after every image has loaded
   useEffect(() => {
-    if (!hasPrinted.current) {
+    if (loadedCount === imgCount && !hasPrinted.current) {
       window.print();
       hasPrinted.current = true;
-      onAfterPrint();
+      // wait for the real afterprint event
+      window.addEventListener("afterprint", onAfterPrint, { once: true });
     }
-  }, [onAfterPrint]);
+  }, [loadedCount, imgCount, onAfterPrint]);
 
   // build lookup: grid[round][participant] = Array of { idx, imageUrl }
   const grid = {};
@@ -59,25 +64,26 @@ function PrintableIdeas({
     <div className="print-container">
       {rows.map(({ origIdx, cardIdx, label }) => (
         <div key={`${origIdx}-${cardIdx}`} className="row image-row">
-          {/* Row number column */}
           <div className="row-number">{label}</div>
-
-          {/* The images + arrows */}
           {participants.map((_, roundOffset) => {
             const participantAtThisRound =
               participants[(origIdx + roundOffset) % participants.length];
             const roundNumber = roundOffset + 1;
             const cell = grid[roundNumber][participantAtThisRound][cardIdx];
-
             return (
               <React.Fragment key={roundOffset}>
                 <div className="image-cell">
                   {cell?.imageUrl && (
-                    <img src={cell.imageUrl} className="print-thumb" alt="" />
+                    <img
+                      src={cell.imageUrl}
+                      className="print-thumb"
+                      alt=""
+                      onLoad={() => setLoadedCount((n) => n + 1)}
+                    />
                   )}
                 </div>
                 {roundOffset < participants.length - 1 && (
-                  <div className="arrow">→</div>
+                  <div className="arrow-cell">→</div>
                 )}
               </React.Fragment>
             );
