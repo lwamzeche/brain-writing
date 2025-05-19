@@ -10,7 +10,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
   const [topic, setTopic] = useState("");
   const [columns, setColumns] = useState([]);
   const [flipStates, setFlipStates] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(50);
+  const [timeLeft, setTimeLeft] = useState(300);
   const [finished, setFinished] = useState(false);
   const [roundStartTime, setRoundStartTime] = useState(null);
   const [submitted, setSubmitted] = useState(false);
@@ -136,7 +136,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
             block: "center",
           });
         }
-      }, 50);
+      }, 300);
       return () => clearTimeout(timeoutId);
     }
   }, [columns]);
@@ -311,7 +311,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
     const intervalId = setInterval(() => {
       const now = new Date();
       const elapsed = (now - roundStartTime) / 1000;
-      const newTimeLeft = Math.max(50 - Math.floor(elapsed), 0);
+      const newTimeLeft = Math.max(300 - Math.floor(elapsed), 0);
       setTimeLeft(newTimeLeft);
       if (newTimeLeft === 0) {
         clearInterval(intervalId);
