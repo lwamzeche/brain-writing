@@ -14,6 +14,7 @@ function PrintableIdeas({
   participants,
   rounds,
   ideasWithImages,
+  topic,
   onAfterPrint,
 }) {
   const imgCount = ideasWithImages.length;
@@ -38,8 +39,8 @@ function PrintableIdeas({
       grid[r][p] = [];
     });
   }
-  ideasWithImages.forEach(({ round, participant, idx, imageUrl }) => {
-    grid[round][participant].push({ idx, imageUrl });
+  ideasWithImages.forEach(({ round, participant, idx, imageUrl, ideaText }) => {
+    grid[round][participant].push({ idx, imageUrl, ideaText });
   });
   // sort each small array by idx
   for (let r = 1; r <= rounds; r++) {
@@ -62,26 +63,40 @@ function PrintableIdeas({
 
   return (
     <div className="print-container">
+      {/*— topic at the very top —*/}
+      <div className="row header-row">
+        <div className="header-cell" style={{ gridColumn: `1 / -1` }}>
+          <h1 className="print-topic">{topic}</h1>
+        </div>
+      </div>
+
       {rows.map(({ origIdx, cardIdx, label }) => (
         <div key={`${origIdx}-${cardIdx}`} className="row image-row">
           <div className="row-number">{label}</div>
+
           {participants.map((_, roundOffset) => {
             const participantAtThisRound =
               participants[(origIdx + roundOffset) % participants.length];
             const roundNumber = roundOffset + 1;
             const cell = grid[roundNumber][participantAtThisRound][cardIdx];
+
             return (
               <React.Fragment key={roundOffset}>
                 <div className="image-cell">
                   {cell?.imageUrl && (
-                    <img
-                      src={cell.imageUrl}
-                      className="print-thumb"
-                      alt=""
-                      onLoad={() => setLoadedCount((n) => n + 1)}
-                    />
+                    <>
+                      <img
+                        src={cell.imageUrl}
+                        className="print-thumb"
+                        alt=""
+                        onLoad={() => setLoadedCount((n) => n + 1)}
+                      />
+                      {/*— idea text below image —*/}
+                      <div className="idea-text">{cell.ideaText}</div>
+                    </>
                   )}
                 </div>
+
                 {roundOffset < participants.length - 1 && (
                   <div className="arrow-cell">→</div>
                 )}
@@ -183,13 +198,21 @@ export default function Home() {
           if (!snap.exists()) continue;
           const data = snap.data();
           const cardImagesObj = data.cardImages || {};
+          const ideasArr = data.ideas || [];
           // cardImagesObj is an object { "0": url0, "1": url1, "2": url2 }
           Object.entries(cardImagesObj).forEach(([idxStr, imageUrl]) => {
             const idx = parseInt(idxStr, 10);
             if (imageUrl) {
+              // ideasWithImages.push({
+              //   idx,
+              //   imageUrl,
+              //   participant: p,
+              //   round: r,
+              // });
               ideasWithImages.push({
                 idx,
                 imageUrl,
+                ideaText: ideasArr[idx] || "", // grab the matching idea
                 participant: p,
                 round: r,
               });
@@ -200,7 +223,13 @@ export default function Home() {
     }
 
     // if (!ideasWithImages.length) return alert("No ideas collected.");
-    setPrintData({ participants: targetParticipants, rounds, ideasWithImages });
+    // setPrintData({ participants: targetParticipants, rounds, ideasWithImages });
+    setPrintData({
+      participants: targetParticipants,
+      rounds,
+      ideasWithImages,
+      topic: sessionTopic, // pass the topic in
+    });
   };
 
   const handleAfterPrint = () => {
@@ -243,6 +272,7 @@ export default function Home() {
         participants={printData.participants}
         rounds={printData.rounds}
         ideasWithImages={printData.ideasWithImages}
+        topic={printData.topic}
         onAfterPrint={handleAfterPrint}
       />
     );
