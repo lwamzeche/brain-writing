@@ -33,27 +33,21 @@ function Login() {
       }
 
       const sessionData = sessionDoc.data();
-      // Check if session is still active
       if (!sessionData.active) {
         setError("Session has ended.");
         return;
       }
 
-      // If this user is the host, skip adding to participants
       if (sessionData.host === playerName) {
-        // They are the host, so do nothing except navigate to home
       } else {
-        // Otherwise, add them to participants array
         await updateDoc(sessionRef, {
           participants: arrayUnion(playerName),
         });
       }
 
-      // Save user info to localStorage
       localStorage.setItem("brainwritingName", playerName);
       localStorage.setItem("brainwritingSessionId", sessionId);
 
-      // Navigate to home
       navigate(`/home`);
     } catch (error) {
       console.error("Error joining session:", error);
@@ -74,30 +68,26 @@ function Login() {
     }
 
     try {
-      // generate a random 6-character session ID
       const newSessionId = Math.random()
         .toString(36)
         .substring(2, 8)
         .toUpperCase();
 
-      // create session document in Firebase
-      // we do NOT add the host to participants
+ 
       await setDoc(doc(db, "brainwritingSessions", newSessionId), {
         createdAt: new Date().toISOString(),
-        host: playerName, // The host's name
-        participants: [], // Keep empty so host is NOT in participants
+        host: playerName,
+        participants: [], 
         active: true,
         topic: sessionTopic,
       });
 
-      // Save user info to localStorage
       localStorage.setItem("brainwritingName", playerName);
       localStorage.setItem("brainwritingSessionId", newSessionId);
 
-      // Show session code to user (optional)
       alert(`Session created! Share this code with others: ${newSessionId}`);
 
-      // Navigate to home
+     
       navigate(`/home`);
     } catch (error) {
       console.error("Error creating session:", error);

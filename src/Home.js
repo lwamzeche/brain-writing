@@ -11,16 +11,13 @@ import { db } from "./firebase";
 import "./css/Home.css";
 
 function PrintableIdeas({ screens, topic, onAfterPrint }) {
-  // 1. Normalize the prop so we never get `undefined`
   const safeScreens = Array.isArray(screens) ? screens : [];
 
-  // 2. Compute how many images to wait for
   const imgCount = safeScreens.reduce((sum, { rowItems }) => {
     if (!Array.isArray(rowItems)) return sum;
     return sum + rowItems.filter((cell) => cell.image).length;
   }, 0);
 
-  // 3. Hooks are always called, no matter what:
   const [loaded, setLoaded] = useState(0);
   const doneRef = useRef(false);
   useEffect(() => {
@@ -31,12 +28,10 @@ function PrintableIdeas({ screens, topic, onAfterPrint }) {
     }
   }, [loaded, imgCount, onAfterPrint]);
 
-  // 4. Now we can bail out early if there’s nothing to render yet
   if (safeScreens.length === 0) {
     return <div>Loading print preview…</div>;
   }
 
-  // 5. Finally, render your full grid
   return (
     <div className="print-container">
       <div className="row header-row">
@@ -92,7 +87,6 @@ export default function Home() {
   const [hostSessionStarted, setHostSessionStarted] = useState(false);
   const [printData, setPrintData] = useState(null);
 
-  // Load session info and redirect participants
   useEffect(() => {
     const storedName = localStorage.getItem("brainwritingName");
     const storedId = localStorage.getItem("brainwritingSessionId");
@@ -151,23 +145,18 @@ export default function Home() {
     else alert("Click your own card.");
   };
 
-  // gather ideas & images, then show print view
   const handleDownloadPDF = async () => {
     const writers = participants.filter((p) => p !== hostName);
     const R = writers.length;
-    const screens = []; // will hold one entry per card per participant
+    const screens = []; 
 
-    // 1) for each final participant p…
     for (const p of writers) {
       const myIndex = writers.indexOf(p);
       const originalOwner = (myIndex + (R - 1)) % R;
 
-      // 2) for each of their 3 cards…
       for (let cardIdx = 0; cardIdx < 3; cardIdx++) {
-        // build the 3 images/texts they saw, in left→right order
         const rowItems = await Promise.all(
           Array.from({ length: R }, async (_, k) => {
-            // writer of round k+1:
             const writerIndex =
               k < R - 1 ? (originalOwner - k + R) % R : myIndex;
             const writer = writers[writerIndex];
@@ -187,7 +176,7 @@ export default function Home() {
         screens.push({
           participant: p,
           cardIdx,
-          rowItems, // an array of length R, in exactly the order they saw it
+          rowItems,
         });
       }
     }
@@ -228,8 +217,7 @@ export default function Home() {
       </div>
     );
 
-  // Print preview
-  // after
+ 
   if (printData) {
     return (
       <PrintableIdeas
