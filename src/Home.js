@@ -10,99 +10,68 @@ import {
 import { db } from "./firebase";
 import "./css/Home.css";
 
-function PrintableIdeas({
-  participants,
-  rounds,
-  ideasWithImages,
-  topic,
-  onAfterPrint,
-}) {
-  const imgCount = ideasWithImages.length;
-  const [loadedCount, setLoadedCount] = useState(0);
-  const hasPrinted = useRef(false);
+function PrintableIdeas({ screens, topic, onAfterPrint }) {
+  // 1. Normalize the prop so we never get `undefined`
+  const safeScreens = Array.isArray(screens) ? screens : [];
 
-  // only print after every image has loaded
+  // 2. Compute how many images to wait for
+  const imgCount = safeScreens.reduce((sum, { rowItems }) => {
+    if (!Array.isArray(rowItems)) return sum;
+    return sum + rowItems.filter((cell) => cell.image).length;
+  }, 0);
+
+  // 3. Hooks are always called, no matter what:
+  const [loaded, setLoaded] = useState(0);
+  const doneRef = useRef(false);
   useEffect(() => {
-    if (loadedCount === imgCount && !hasPrinted.current) {
+    if (imgCount > 0 && loaded === imgCount && !doneRef.current) {
       window.print();
-      hasPrinted.current = true;
-      // wait for the real afterprint event
+      doneRef.current = true;
       window.addEventListener("afterprint", onAfterPrint, { once: true });
     }
-  }, [loadedCount, imgCount, onAfterPrint]);
+  }, [loaded, imgCount, onAfterPrint]);
 
-  // build lookup: grid[round][participant] = Array of { idx, imageUrl }
-  const grid = {};
-  for (let r = 1; r <= rounds; r++) {
-    grid[r] = {};
-    participants.forEach((p) => {
-      grid[r][p] = [];
-    });
-  }
-  ideasWithImages.forEach(({ round, participant, idx, imageUrl, ideaText }) => {
-    grid[round][participant].push({ idx, imageUrl, ideaText });
-  });
-  // sort each small array by idx
-  for (let r = 1; r <= rounds; r++) {
-    participants.forEach((p) => {
-      grid[r][p].sort((a, b) => a.idx - b.idx);
-    });
+  // 4. Now we can bail out early if there’s nothing to render yet
+  if (safeScreens.length === 0) {
+    return <div>Loading print preview…</div>;
   }
 
-  // build a flat list of rows so we can number them: each origIdx × 3 cards
-  const rows = [];
-  participants.forEach((_, origIdx) =>
-    [0, 1, 2].forEach((cardIdx, localIdx) => {
-      rows.push({
-        origIdx,
-        cardIdx,
-        label: origIdx * 3 + localIdx + 1 + ".", // “1.”, “2.”, …
-      });
-    })
-  );
-
+  // 5. Finally, render your full grid
   return (
     <div className="print-container">
-      {/*— topic at the very top —*/}
       <div className="row header-row">
         <div className="header-cell" style={{ gridColumn: `1 / -1` }}>
           <h1 className="print-topic">{topic}</h1>
         </div>
       </div>
 
-      {rows.map(({ origIdx, cardIdx, label }) => (
-        <div key={`${origIdx}-${cardIdx}`} className="row image-row">
-          <div className="row-number">{label}</div>
+      {safeScreens.map(({ participant, cardIdx, rowItems }, rowIdx) => (
+        <div key={`${participant}-${cardIdx}`} className="row image-row">
+          <div className="row-number">{rowIdx + 1}.</div>
 
-          {participants.map((_, roundOffset) => {
-            const participantAtThisRound =
-              participants[(origIdx + roundOffset) % participants.length];
-            const roundNumber = roundOffset + 1;
-            const cell = grid[roundNumber][participantAtThisRound][cardIdx];
-
-            return (
-              <React.Fragment key={roundOffset}>
+          {Array.isArray(rowItems) &&
+            rowItems.map(({ image, idea }, colIdx) => (
+              <React.Fragment key={colIdx}>
                 <div className="image-cell">
-                  {cell?.imageUrl && (
+                  {image ? (
                     <>
                       <img
-                        src={cell.imageUrl}
+                        src={image}
                         className="print-thumb"
                         alt=""
-                        onLoad={() => setLoadedCount((n) => n + 1)}
+                        onLoad={() => setLoaded((n) => n + 1)}
                       />
-                      {/*— idea text below image —*/}
-                      <div className="idea-text">{cell.ideaText}</div>
+                      <div className="idea-text">{idea}</div>
                     </>
+                  ) : (
+                    <div className="print-thumb placeholder" />
                   )}
                 </div>
-
-                {roundOffset < participants.length - 1 && (
+                {colIdx < rowItems.length - 1 && (
                   <div className="arrow-cell">→</div>
                 )}
               </React.Fragment>
-            );
-          })}
+            ))}
         </div>
       ))}
     </div>
@@ -184,52 +153,46 @@ export default function Home() {
 
   // gather ideas & images, then show print view
   const handleDownloadPDF = async () => {
-    // always exclude the host from columns
-    const targetParticipants = participants.filter((p) => p !== hostName);
-    // number of rounds = number of writers
-    const rounds = targetParticipants.length;
-    const ideasWithImages = [];
+    const writers = participants.filter((p) => p !== hostName);
+    const R = writers.length;
+    const screens = []; // will hold one entry per card per participant
 
-    for (const p of targetParticipants) {
-      for (let r = 1; r <= rounds; r++) {
-        const docId = `${sessionId}_${p}_round_${r}`;
-        try {
-          const snap = await getDoc(doc(db, "brainwritingRounds", docId));
-          if (!snap.exists()) continue;
-          const data = snap.data();
-          const cardImagesObj = data.cardImages || {};
-          const ideasArr = data.ideas || [];
-          // cardImagesObj is an object { "0": url0, "1": url1, "2": url2 }
-          Object.entries(cardImagesObj).forEach(([idxStr, imageUrl]) => {
-            const idx = parseInt(idxStr, 10);
-            if (imageUrl) {
-              // ideasWithImages.push({
-              //   idx,
-              //   imageUrl,
-              //   participant: p,
-              //   round: r,
-              // });
-              ideasWithImages.push({
-                idx,
-                imageUrl,
-                ideaText: ideasArr[idx] || "", // grab the matching idea
-                participant: p,
-                round: r,
-              });
-            }
-          });
-        } catch {}
+    // 1) for each final participant p…
+    for (const p of writers) {
+      const myIndex = writers.indexOf(p);
+      const originalOwner = (myIndex + (R - 1)) % R;
+
+      // 2) for each of their 3 cards…
+      for (let cardIdx = 0; cardIdx < 3; cardIdx++) {
+        // build the 3 images/texts they saw, in left→right order
+        const rowItems = await Promise.all(
+          Array.from({ length: R }, async (_, k) => {
+            // writer of round k+1:
+            const writerIndex =
+              k < R - 1 ? (originalOwner - k + R) % R : myIndex;
+            const writer = writers[writerIndex];
+            const docId = `${sessionId}_${writer}_round_${k + 1}`;
+            const snap = await getDoc(doc(db, "brainwritingRounds", docId));
+            const data = snap.exists() ? snap.data() : {};
+            const idea = (data.ideas || [
+              "(No idea)",
+              "(No idea)",
+              "(No idea)",
+            ])[cardIdx];
+            const image = (data.cardImages || {})[cardIdx] || "";
+            return { idea, image };
+          })
+        );
+
+        screens.push({
+          participant: p,
+          cardIdx,
+          rowItems, // an array of length R, in exactly the order they saw it
+        });
       }
     }
 
-    // if (!ideasWithImages.length) return alert("No ideas collected.");
-    // setPrintData({ participants: targetParticipants, rounds, ideasWithImages });
-    setPrintData({
-      participants: targetParticipants,
-      rounds,
-      ideasWithImages,
-      topic: sessionTopic, // pass the topic in
-    });
+    setPrintData({ screens, topic: sessionTopic });
   };
 
   const handleAfterPrint = () => {
@@ -266,12 +229,11 @@ export default function Home() {
     );
 
   // Print preview
+  // after
   if (printData) {
     return (
       <PrintableIdeas
-        participants={printData.participants}
-        rounds={printData.rounds}
-        ideasWithImages={printData.ideasWithImages}
+        screens={printData.screens}
         topic={printData.topic}
         onAfterPrint={handleAfterPrint}
       />

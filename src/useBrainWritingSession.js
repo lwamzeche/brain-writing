@@ -116,7 +116,14 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       });
 
       setColumns(chain);
-      setFlipStates(chain.map(() => [false, false, false]));
+      setFlipStates(
+        chain.map(
+          (col) =>
+            col.isEditable
+              ? [false, false, false] // editable cards: text-side up
+              : [true, true, true] // others’ cards: image-side up
+        )
+      );
     }
     fetchChain();
   }, [isHost, participants, roundNumber, name]);
@@ -209,7 +216,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
 
   // Helper function to generate images
   const generateImageForCard = useCallback((key, ideaText) => {
-    const prompt = `Illustration representing "${ideaText}"`;
+    const prompt = `A clear, high-quality illustration visually representing "${ideaText}", do not write text or any lettering, use only pure visual elements.`;
     generateImage(prompt)
       .then((imageUrl) => {
         setCardImages((prevImages) => ({
@@ -225,6 +232,73 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
         }));
       });
   }, []);
+
+  useEffect(() => {
+    const sessionId = localStorage.getItem("brainwritingSessionId") || "";
+    if (!sessionId) return;
+
+    columns.forEach((col) => {
+      // only pre-generate for *past* rounds
+      if (col.isEditable) return;
+
+      col.ideas.forEach((ideaText, cardIndex) => {
+        if (!ideaText.trim()) return;
+
+        const key = `${col.participant}-${col.round}-${cardIndex}`;
+        // already have it?
+        if (cardImages[key]) return;
+
+        // mark it as loading in state
+        setCardImages((prev) => ({ ...prev, [key]: "loading" }));
+
+        // reference to this round’s Firestore doc
+        const docRef = doc(
+          db,
+          "brainwritingRounds",
+          `${sessionId}_${col.participant}_round_${col.round}`
+        );
+
+        // look in Firestore first
+        getDoc(docRef)
+          .then((snap) => {
+            const existingUrl =
+              snap.exists() && snap.data().cardImages?.[cardIndex];
+            if (existingUrl) {
+              // use the saved image
+              setCardImages((prev) => ({ ...prev, [key]: existingUrl }));
+            } else {
+              // none in Firestore ⇒ generate & persist
+              const prompt = `A clear, high-quality illustration visually representing "${ideaText}", with no text or lettering—only pure visual elements.`;
+              generateImage(prompt)
+                .then((url) => {
+                  // update React state
+                  setCardImages((prev) => ({ ...prev, [key]: url }));
+                  // merge into Firestore doc
+                  return updateDoc(docRef, {
+                    [`cardImages.${cardIndex}`]: url,
+                  });
+                })
+                .catch((err) =>
+                  console.error("DALL·E generation failed:", err)
+                );
+            }
+          })
+          .catch((err) => {
+            // Firestore read failed ⇒ still generate & persist
+            console.error("Error reading Firestore:", err);
+            const prompt = `A clear, high-quality illustration visually representing "${ideaText}", with no text or lettering—only pure visual elements.`;
+            generateImage(prompt)
+              .then((url) => {
+                setCardImages((prev) => ({ ...prev, [key]: url }));
+                return updateDoc(docRef, {
+                  [`cardImages.${cardIndex}`]: url,
+                });
+              })
+              .catch((err) => console.error("DALL·E generation failed:", err));
+          });
+      });
+    });
+  }, [columns, cardImages, generateImageForCard]);
 
   // 6. Navigation and saving logic
   const navigateToNextRound = useCallback(async () => {
@@ -263,39 +337,53 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
 
   const saveCurrentRound = useCallback(async () => {
     if (isHost) return;
+
     try {
+      // Grab the last (editable) column’s data
       const currentColumns = columnsRef.current;
-      if (currentColumns && currentColumns.length > 0) {
-        const lastColIndex = currentColumns.length - 1;
-        const currentRoundData = currentColumns[lastColIndex];
-        if (currentRoundData && currentRoundData.participant) {
-          const sessionId = localStorage.getItem("brainwritingSessionId") || "";
-          if (!sessionId) return; // same safeguard
-          const docId = `${sessionId}_${currentRoundData.participant}_round_${currentRoundData.round}`;
-          const ideasToSave = currentRoundData.ideas.map((idea) =>
-            idea.trim() === "" ? "(No idea)" : idea
-          );
+      if (!currentColumns.length) return;
+      const lastCol = currentColumns[currentColumns.length - 1];
+      const { participant, round, ideas } = lastCol;
 
-          // build an object with all card images for this round
-          const roundCardImages = {};
-          [0, 1, 2].forEach((i) => {
-            const key = `${currentRoundData.participant}-${currentRoundData.round}-${i}`;
-            roundCardImages[i] = cardImages[key] || "";
-          });
+      const sessionId = localStorage.getItem("brainwritingSessionId");
+      if (!sessionId) return;
+      const docId = `${sessionId}_${participant}_round_${round}`;
+      const docRef = doc(db, "brainwritingRounds", docId);
 
-          await setDoc(doc(db, "brainwritingRounds", docId), {
-            participant: currentRoundData.participant,
-            round: currentRoundData.round,
-            ideas: ideasToSave,
-            cardImages: roundCardImages,
-            timestamp: new Date().toISOString(),
+      // 1) Immediately save the ideas—no flips required
+      const ideasToSave = ideas.map((i) => i.trim() || "(No idea)");
+      await setDoc(docRef, {
+        participant,
+        round,
+        ideas: ideasToSave,
+        // initialize an empty cardImages object so your PDF code
+        // sees something—even if images haven’t generated yet
+        cardImages: {},
+        timestamp: new Date().toISOString(),
+      });
+
+      // 2) Now generate & persist all three images in the background
+      ideasToSave.forEach((ideaText, idx) => {
+        const prompt =
+          `A clear, high-quality illustration visually representing ` +
+          `"${ideaText}", with no text or lettering—only pure visuals.`;
+
+        generateImage(prompt)
+          .then((url) =>
+            // stick each URL into cardImages[idx]
+            updateDoc(docRef, { [`cardImages.${idx}`]: url })
+          )
+          .catch((err) => {
+            console.error("Image gen failed for last round:", err);
+            return updateDoc(docRef, { [`cardImages.${idx}`]: "" });
           });
-          setFinished(true);
-          // If time ended, move to next
-          if (timeLeft === 0) {
-            await navigateToNextRound();
-          }
-        }
+      });
+
+      setFinished(true);
+
+      // If the timer ran out, go straight to drawing the next route
+      if (timeLeft === 0) {
+        await navigateToNextRound();
       }
     } catch (error) {
       console.error("Error saving round data:", error);
@@ -303,7 +391,7 @@ export function useBrainWritingSession(name, roundNumber, navigate) {
       setFinished(false);
       setSubmitted(false);
     }
-  }, [isHost, timeLeft, navigateToNextRound, cardImages]);
+  }, [isHost, timeLeft, navigateToNextRound]);
 
   // 7. Timer for participants
   useEffect(() => {
